@@ -1,58 +1,51 @@
-import requests
 from langchain.tools import BaseTool
 from typing import Optional, Type
 from pydantic import BaseModel, Field
+import requests
+from utils import obtenir_token
+from config import POLE_EMPLOI_API_URL
 
 class JobSearchInput(BaseModel):
-    keyword: str = Field(..., description="Mot-clé pour la recherche d'emploi")
-    location: Optional[str] = Field(None, description="Lieu de l'emploi")
-
-class TrainingSearchInput(BaseModel):
-    keyword: str = Field(..., description="Mot-clé pour la recherche de formation")
-    location: Optional[str] = Field(None, description="Lieu de la formation")
+    mot_cle: str = Field(..., description="Mot-clé pour la recherche d'emploi")
+    lieu: Optional[str] = Field(None, description="Lieu de l'emploi")
+    publiee_depuis: Optional[int] = Field(None, description="Nombre de jours depuis la publication")
+    salaire_min: Optional[int] = Field(None, description="Salaire minimum annuel")
+    type_contrat: Optional[str] = Field(None, description="Type de contrat")
 
 class PoleEmploiJobSearchTool(BaseTool):
-    name = "pole_emploi_job_search"
-    description = "Recherche des offres d'emploi sur Pôle Emploi"
+    name = "recherche_emploi_pole_emploi"
+    description = "Recherche des offres d'emploi sur Pôle Emploi en fonction de divers critères"
     args_schema: Type[BaseModel] = JobSearchInput
 
-    def _run(self, keyword: str, location: Optional[str] = None):
-        access_token = self._get_access_token()
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
-        params = {
-            "motsCles": keyword,
-            "commune": location if location else None
-        }
-        response = requests.get("https://api.emploi-store.fr/partenaire/offresdemploi/v2/offres/search", 
-                                headers=headers, params=params)
-        return response.json()
+    def _run(self, mot_cle: str, lieu: Optional[str] = None, publiee_depuis: Optional[int] = None, 
+             salaire_min: Optional[int] = None, type_contrat: Optional[str] = None):
+        token = obtenir_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        params = {"motsCles": mot_cle}
+        if lieu:
+            params["commune"] = lieu
+        if publiee_depuis:
+            params["publieeDepuis"] = publiee_depuis
+        if salaire_min:
+            params["salaireMin"] = salaire_min
+        if type_contrat:
+            params["typeContrat"] = type_contrat
 
-    def _get_access_token(self):
-        # Implémentez la logique pour obtenir le token d'accès ici
-        pass
+        response = requests.get(POLE_EMPLOI_API_URL, headers=headers, params=params)
+        response.raise_for_status()
+        offres = response.json().get('resultats', [])
+        return self._format_offres(offres[:10])
 
-class PoleEmploiTrainingSearchTool(BaseTool):
-    name = "pole_emploi_training_search"
-    description = "Recherche des offres de formation sur Pôle Emploi"
-    args_schema: Type[BaseModel] = TrainingSearchInput
-
-    def _run(self, keyword: str, location: Optional[str] = None):
-        access_token = self._get_access_token()
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
-        params = {
-            "q": keyword,
-            "region": location if location else None
-        }
-        response = requests.get("https://api.emploi-store.fr/partenaire/offresdemploi/v2/formations", 
-                                headers=headers, params=params)
-        return response.json()
-
-    def _get_access_token(self):
-        # Implémentez la logique pour obtenir le token d'accès ici
-        pass
+    def _format_offres(self, offres):
+        formatted_offres = []
+        for offre in offres:
+            formatted_offre = {
+                "titre": offre.get("intitule"),
+                "entreprise": offre.get("entreprise", {}).get("nom"),
+                "lieu": offre.get("lieuTravail", {}).get("libelle"),
+                "type_contrat": offre.get("typeContrat", {}).get("libelle"),
+                "description": offre.get("description")[:200] + "..." if offre.get("description") else "Pas de description disponible",
+                "url": offre.get("origineOffre", {}).get("urlOrigine")
+            }
+            formatted_offres.append(formatted_offre)
+        return formatted_offres

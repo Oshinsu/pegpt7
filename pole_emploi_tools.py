@@ -18,23 +18,26 @@ class PoleEmploiJobSearchTool(BaseTool):
     args_schema: Type[BaseModel] = JobSearchInput
 
     def _run(self, mot_cle: str, lieu: Optional[str] = None, publiee_depuis: Optional[int] = None, 
-             salaire_min: Optional[int] = None, type_contrat: Optional[str] = None):
-        token = obtenir_token()
-        headers = {"Authorization": f"Bearer {token}"}
-        params = {"motsCles": mot_cle}
-        if lieu:
-            params["commune"] = lieu
-        if publiee_depuis:
-            params["publieeDepuis"] = publiee_depuis
-        if salaire_min:
-            params["salaireMin"] = salaire_min
-        if type_contrat:
-            params["typeContrat"] = type_contrat
+             salaire_min: Optional[int] = None, type_contrat: Optional[str] = None) -> str:
+        try:
+            token = obtenir_token()
+            headers = {"Authorization": f"Bearer {token}"}
+            params = {"motsCles": mot_cle}
+            if lieu:
+                params["commune"] = lieu
+            if publiee_depuis:
+                params["publieeDepuis"] = publiee_depuis
+            if salaire_min:
+                params["salaireMin"] = salaire_min
+            if type_contrat:
+                params["typeContrat"] = type_contrat
 
-        response = requests.get(POLE_EMPLOI_API_URL, headers=headers, params=params)
-        response.raise_for_status()
-        offres = response.json().get('resultats', [])
-        return self._format_offres(offres[:10])
+            response = requests.get(POLE_EMPLOI_API_URL, headers=headers, params=params)
+            response.raise_for_status()
+            offres = response.json().get('resultats', [])
+            return self._format_offres(offres[:10])
+        except Exception as e:
+            return f"Une erreur s'est produite lors de la recherche d'emploi : {str(e)}"
 
     def _format_offres(self, offres):
         formatted_offres = []
@@ -48,4 +51,4 @@ class PoleEmploiJobSearchTool(BaseTool):
                 "url": offre.get("origineOffre", {}).get("urlOrigine")
             }
             formatted_offres.append(formatted_offre)
-        return formatted_offres
+        return str(formatted_offres)  # Convert to string to ensure compatibility

@@ -6,7 +6,10 @@ st.title("Pôle Emploi GPT")
 
 @st.cache_resource
 def get_agent():
-    return create_pole_emploi_agent()
+    agent = create_pole_emploi_agent()
+    if agent is None:
+        st.error("L'agent n'a pas pu être initialisé. Veuillez vérifier votre configuration et réessayer.")
+    return agent
 
 agent = get_agent()
 
